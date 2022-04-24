@@ -2,6 +2,7 @@
 \usepackage[utf8]{inputenc}
 \usepackage{fontspec}
 \setmainfont{Times New Roman}
+\usepackage{tikz}
 \usepackage{amsmath}
 \usepackage{indentfirst}
 \usepackage{graphicx}
@@ -35,12 +36,12 @@
     \newpage
     \section{Introduction}
     \subsection{Project Detail}
-    This article is used for ENGG1320 group project: AI Coaching System. We introduced a method to calculate the limb actions of basketball players with wearable device (bracelet integrated with gyroscope, accelerometer and velocity detector and action-tracing gloves). 
+    This article is used for ENGG1320 group project: AI Coaching System. We introduced a method to calculate the limb actions of basketball players with wearable device (bracelet integrated with gyroscope, accelerometer and velocity detector and action-tracing gloves) and use machine learning to generate feedback for users.
     \subsection{Algorithm Framework}
     \begin{center}
-    \includegraphics[width = \linewidth]{Algorithm Framework.png}
+    \includegraphics[width = \linewidth]{Algorithm Framework_1.png}
     \end{center}
-    \section{Kalman Filter}
+    \section{Kalman Filter (Only for Hardware Not Integrated with A Filter)}
     Our model requires Bayesian model to build up the detection. Thus we apply Kalman filter on the dataset. The following gives a brief derivation.
     \subsection{Derivation}
     Two possible noise are the white noise $w_k \sim N(0, \sigma_{w_k}^2)$ and measurement noise $v_k$. Then for real data and data measured, 
@@ -270,9 +271,9 @@
     \begin{aligned}
         \bm{g}_b = \bm{Z}_{\gamma} \bm{Z}_{\theta} \bm{g}
         &= \begin{bmatrix}
-            1 & 0 & 0 \\
-            0 & \cos \gamma & -\sin \gamma \\
-            0 & \sin \gamma & \cos \gamma
+            \cos \gamma & -\sin \gamma & 0 \\
+            \sin \gamma & \cos \gamma & 0\\
+            0 & 0 & 1
         \end{bmatrix} \begin{bmatrix}
             \cos \theta & 0 & \sin \theta \\
             0 & 1 & 0\\
@@ -282,19 +283,25 @@
             0 \\ 0 \\ -g
         \end{bmatrix} \\
         &= \begin{bmatrix}
-            -\sin \theta \\ \sin \gamma \cos \theta \\ -\cos \gamma \cos \theta 
+            \sin \theta \cos \gamma \\ \sin \gamma \sin \theta \\ \cos \theta
         \end{bmatrix} g
     \end{aligned}
     \end{equation}
     Then we can come up with the attitude from the body reference frame gravitational acceleration, where
     \begin{equation}
-        \left\{ \begin{aligned} &\gamma = -\arctan \frac{g_{by}}{g_{bz}}  \\
-            & \theta = \arctan \left( \frac{g_{bx}}{\cos \gamma g_{bz}}\right) \end{aligned} \right.
+        \left\{ \begin{aligned} &\gamma = \arctan \frac{g_{by}}{g_{bx}}  \\
+            & \theta = \arctan \left( \frac{g_{by}}{\sin \gamma g_{bz}}\right) \end{aligned} \right.
     \end{equation}
+\newpage 
     \section{Data Analysis}
     \subsection{Model of Users' Motion}
     We establish the state model $\bm{S}$ for motion of players. \par
-    \begin{minipage}[b]{0.55\linewidth}
+    \begin{minipage}[b]{0.50\linewidth}
+        \includegraphics[height=15cm]{Hook Skeleton.png}
+        \end{minipage}
+        \begin{minipage}[b]{0.50\linewidth}
+        \includegraphics[height=15cm]{Shooting Skeleton_3.png}
+        \end{minipage}
         Data considered in analysis section includes the roll angle and pitch angle of players' limbs. Upper limb angles are denoted as $(\bm{\theta}_1, \bm{\gamma}_1)$, and thigh angles are denoted as $(\bm{\theta}_2, \bm{\gamma}_2)$. Wearable devices are adjusted to two independent coordinate respectively. Average angular velocity $\bar{\bm{\omega}}$ can be measured by
         \begin{equation}
             \bar{\bm{\omega}} = \frac{1}{\sum_{T_s} \Delta t}\sum_{t \in T_s} \bm{\theta}(t)
@@ -325,17 +332,102 @@
                 \gamma_{\text{left thigh}} & \gamma_{\text{right thigh}}
             \end{bmatrix}
         \end{gather}
-        \end{minipage}
-        \hfill
-        \begin{minipage}[b]{0.45\linewidth}
-        \includegraphics[height=15cm]{Shooting Skeleton_2.png}
-        \end{minipage}
     \subsection{Data Analysis Method: Support Vector Machine}
     The user shooting outcome can be mapped into label space $\mathcal{H}$, where
     \begin{equation}
         \mathcal{H} = \left\{ \begin{aligned}
-            -&1 &\text{field goal in} \\
+            -&1 &\text{field goal miss} \\
             &1 &\text{field goal made}
         \end{aligned} \right.
     \end{equation}
+We use Support Vector Machine to study the motions of professional athletes. To avoid non-linear dataset, radius basic function is applied as the kernel function, where
+\begin{equation}
+    K(x, y) = \exp \left( -\frac{||x - y ||^2}{2 \sigma^2}\right)
+\end{equation}
+Penalty factor $C$ is set comparatively low to achieve higher generalization. SVM training will find solution of following target
+\begin{gather}
+    \arg \min_{\bm{\alpha}} \frac{1}{2}\sum_{i=1}^N \sum_{j=1}^N \alpha_i \alpha_j y_i y_j K(\bm{x}_i,\bm{x}_j) - \sum_{i=1}^N \alpha_i  \notag \\ \text{s.t.}~\sum_{i=1}^N \alpha_i y_i = 0,~0 \leq \alpha_i \leq C
+\end{gather}
+with optimal multiplier $\bm{\alpha}^*$ obtained, the weight $\bm{w}$ and bias $b$ can be calculated
+\begin{gather}
+    \bm{w}^* = \sum_{i=1}^n \alpha_i^* y_i \bm{x}_i \\
+    y_j(K(\bm{w}^*, \bm{x}_j) + b^*) = 1 \rightarrow b^* = y_j - \sum_{i=1}^n \alpha_i^* y_i K(\bm{x}_i, \bm{x}_j)
+\end{gather}
+We use sklearn library integrated in Python (prototype LIBSVM in C++) to complete the training process. Weight vector and bias will be stored in the *.m file to be used for data analysis later on. The update on the training app will include maintenance on shooting database. 
+\subsection{Feedback Algorithm}
+Once the weight vector and bias is studied, it can be used in giving feedback to users. Assume that the data collected from user is $\bm{S}$, then the decision-making function is
+\begin{equation}
+    f(\bm{S}) = sign(K(\bm{w}, \bm{S}) + b)
+\end{equation}
+We tend to make the inner quantity as large as possible, which increases the possibility to make field goal according to the database. Since all the physical quantities take positive values, we use an intuitive algorithm to generate the feedback: increase the parameter with positive weight, and decrease the parameter with negative weight. We take order to optimize the shooting motion. With short-distance shot (inside the free throw line), we suggest two-motion shots. So bounce height will be considered more important. By contrast, in long-distance one, we suggest one-motion shots and put more priority to upper limb and thigh attitude. Assume the threshold value for distance is $r_t$, then the following gives the graph of our optimizing order. \par \noindent
+With $r < r_t$ (two-motion shot),
+\begin{center}
+\begin{tikzpicture}
+    \node[shape=circle,fill=lightgray] (a) at (0, 0) {NIL};
+    \node[shape=circle,fill=lightgray] (b1) at (2, 2) {$\bm{\theta}_1$};
+    \node[shape=circle, fill=lightgray] (b2) at (2,-2) {$\bm{\gamma}_1$};
+    \node[shape=circle, fill=lightgray] (c) at (4,0) {$\bar{\bm{\omega}}$};
+    \node[shape=circle,fill=lightgray] (d1) at (6,2) {$\bm{\theta}_2$};
+    \node[shape=circle,fill=lightgray] (d2)at (6,-2) {$\bm{\gamma}_2$};
+    \node[shape=circle,fill=lightgray] (e) at (8,0) {$h$};
+    \node[shape=circle,fill=lightgray] (f) at (10,0) {$\beta$};
+    \draw[->] (a) -- (b1);
+    \draw[->] (a) -- (b2);
+    \draw[->] (b1) -- (c);
+    \draw[->] (b2) -- (c);
+    \draw[->] (c) -- (d1);
+    \draw[->] (c) -- (d2);
+    \draw[->] (d1) -- (e);
+    \draw[->] (d2) -- (e);
+    \draw[->] (e) -- (f);
+    \draw[->] (f) to [out = 90,in=90] (a);
+\end{tikzpicture}
+\end{center}
+With $ r\geq r_t$ (one-motion shot), 
+\begin{center}
+    \begin{tikzpicture}
+        \node[shape=circle,fill=lightgray] (a) at (0, 0) {NIL};
+        \node[shape=circle,fill=lightgray] (b1) at (2, 2) {$\bm{\theta}_1$};
+        \node[shape=circle, fill=lightgray] (b2) at (2,-2) {$\bm{\gamma}_1$};
+        \node[shape=circle, fill=lightgray] (c) at (6,0) {$\bar{\bm{\omega}}$};
+        \node[shape=circle,fill=lightgray] (d1) at (8,2) {$\bm{\theta}_2$};
+        \node[shape=circle,fill=lightgray] (d2)at (8,-2) {$\bm{\gamma}_2$};
+        \node[shape=circle,fill=lightgray] (e) at (4,0) {$h$};
+        \node[shape=circle,fill=lightgray] (f) at (10,0) {$\beta$};
+        \draw[->] (a) -- (b1);
+        \draw[->] (a) -- (b2);
+        \draw[->] (b1) -- (e);
+        \draw[->] (b2) -- (e);
+        \draw[->] (e) -- (c);
+        \draw[->] (c) -- (d1);
+        \draw[->] (c) -- (d2);
+        \draw[->] (d1) -- (f);
+        \draw[->] (d2) -- (f);
+        \draw[->] (f) to [out = 90,in=90] (a);
+    \end{tikzpicture}
+    \end{center}
+\newpage
+In every feedback process, the program will search for optimization in the graph above using BFS. It continually searches for positive weight nodes and negative weight nodes, and use step size $\eta$ which is uniquely set up for each node. Every time a node $v$ is visited, its corresponding step size $\eta_v$ will be added/deduced according to its weight.\
+\begin{algorithm}[H]
+    \label{feedback algorithm}
+    \caption{BFS($\bm{S}$)}
+    \begin{algorithmic}
+        \REQUIRE{priority graph $G(V, E)$}
+        \STATE{intialize feedback vector $\bm{f} = \bm{0}$, starting vertex $s = G.$NIL, queue $Q$}
+        \STATE{$Q.enqueue(s)$}
+        \WHILE{$sign(K(\bm{w}, \bm{S} - \bm{f}) + b) \neq 1$}
+        \STATE{$u \gets Q.deque$}
+        \FOR{$v \in u.adj$}
+        \IF{$\bm{w}.v \geq 0$}
+        \STATE{$\bm{f}.v \gets \bm{f}.v + \eta_{v}$}
+        \ELSE
+        \STATE{$\bm{f}.v \gets \bm{f}.v -\eta_{v}$}
+        \ENDIF
+        \STATE{$Q.enqueue(v)$}
+        \ENDFOR
+        \ENDWHILE
+        \RETURN{$\bm{f}$}
+    \end{algorithmic}
+\end{algorithm}
+With the feedback vector, it is easy to generate the feedback for users literally and schematically.
 \end{document}
